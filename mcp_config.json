@@ -1,0 +1,19 @@
+{
+  "mcpServers": {
+    "mev-nordrouter-img": {
+      "command": "/Users/evmelnik/Documents/aiDev/imgRouter-mcp/.venv/bin/python",
+      "args": [
+        "/Users/evmelnik/Documents/aiDev/imgRouter-mcp/server.py"
+      ],
+      "env": {
+        "NORDROUTER_API_KEY": "sk-iYCrZnzrrKsTX8mLKe8H0kmxL0pshaiuh5g4oEVCz2TIKwsK",
+        "NORDROUTER_BASE_URL": "https://nordrouter.net/v1",
+        "NORDROUTER_TIMEOUT": "180",
+        "NORDROUTER_PROJECT_ROOT": "/Users/evmelnik/Documents/aiDev",
+        "NORDROUTER_SAFETY_FILTER": "false"
+      },
+      "timeout": 180,
+      "disabled": false
+    }
+  }
+}
