@@ -7,25 +7,30 @@
 ## Возможности
 
 - `generate_image` — генерация изображения по текстовому описанию (с опцией нескольких вариантов).
-- `edit_image` — редактирование существующего изображения по инструкции (с опорными изображениями).
+- `edit_image` — редактирование существующего изображения по инструкции.
 - `list_image_models` — список моделей, поддерживающих изображения.
 - `batch_generate` — генерация одним промптом сразу на нескольких моделях (параллельно).
+- `upscale_image` — увеличение разрешения через Recraft Upscale.
+- `remove_background` — удаление фона через Recraft Remove Background.
 
 ## Модели
 
-NordRouter имеет два разных API-контура для изображений, и сервер сам выбирает
-нужный в зависимости от модели. Таблица проверена живыми запросами; тот же
-набор возвращает `list_image_models` вместе с профилем параметров.
+**Модель по умолчанию: `gpt-image-2` (OpenAI).** Всегда используйте её, если
+пользователь явно не просит другую модель. Она лучше всего работает с текстом на
+изображениях, фотореализмом и редактированием.
 
-| Модель | Контур | Принимает | Статус |
-| --- | --- | --- | --- |
-| `google/gemini-3.1-flash-image-preview` | `POST /chat/completions` (Markdown-URL в ответе) | `modalities`, `messages`, `safety_filter` | работает |
-| `openai/gpt-image-2` | `POST /images/generations` (`data[*].b64_json`) | `prompt`, `n`, `size`, `quality`, `safety_filter` | работает |
-| `bytedance/seedream-5.0-pro` | `POST /images/generations` | — | в `/v1` не провижинена: любой запрос → 400 `invalid_request` |
-| `openai/gpt-5.4-nano:fjord`, `search/openai/gpt-5.4-nano:fjord` | — | — | текстовые модели, в `/v1/models` попали ошибочно → 404 |
+| Модель | ID | Режимы | Цена (≈) | Назначение |
+| --- | --- | --- | --- | --- |
+| **GPT Image 2** ⭐ | `gpt-image-2` | generate, edit | $0.05 / $0.0375 | **Дефолт.** Текст, фотореализм, i2i |
+| Nano Banana 2.1 | `nano-banana-pro` | generate, edit | $0.025 | Быстрая дешёвая генерация |
+| Grok Image | `grok` | generate, edit | $0.025 | Креативность, точное следование промпту |
+| Qwen Image 3 Pro | `qwen3-pro` | generate, edit | $0.0438 | Детализация, сильный i2i |
+| Recraft Upscale | `recraft-upscale` | upscale | $0.0063 | Увеличение разрешения |
+| Recraft Remove BG | `recraft-remove-bg` | remove_bg | $0.0063 | Удаление фона |
 
-`generate_image` по умолчанию использует
-`google/gemini-3.1-flash-image-preview`.
+> ⚠️ **Разрешение по умолчанию: `1k`** (оптимизировано для веба). Используйте
+> `2k` только если пользователь явно просит высокое качество. Никогда не
+> используйте `4k` без явного запроса.
 
 ## Установка
 
@@ -106,9 +111,9 @@ MCP-сервер регистрируется глобально и доступ
 
 ```json
 {
-  "model": "google/gemini-3.1-flash-image-preview",
-  "modalities": ["image", "text"],
-  "messages": [...],
+  "model": "image/gpt-image-2-edit",
+  "input_image": "data:image/png;base64,...",
+  "prompt": "...",
   "safety_filter": false
 }
 ```
@@ -152,10 +157,12 @@ Model 'bytedance/seedream-5.0-pro' cannot generate images: not usable through /v
 | Параметр | Обязательный | Что указывать |
 | --- | --- | --- |
 | `prompt` | да | Описание картинки (формула ниже) |
-| `output_path` | да | Путь относительно корня проекта, например `public/images/hero.png`. Каталоги создаются сами |
-| `model` | нет | По умолчанию `google/gemini-3.1-flash-image-preview`. Берите `openai/gpt-image-2`, если нужны `size`/`quality` |
-| `size` | нет | Только для `images`-моделей: `1024x1024`, `1024x1536` (портрет), `1536x1024` (баннер) |
-| `quality` | нет | Только для `openai/gpt-image-2`: `low`, `medium`, `high`, `auto` |
+| `output_path` | да | Путь относительно `NORDROUTER_PROJECT_ROOT`, например `Chats/public/images/hero.png`. Каталоги создаются сами |
+| `model` | нет | **По умолчанию `gpt-image-2` — не выбирайте другую модель без явной просьбы пользователя** |
+| `aspect_ratio` | нет | Для /media-моделей: `1:1`, `16:9`, `9:16` и т.д. |
+| `resolution` | нет | **По умолчанию `1k`** (для веба). `2k`/`4k` — только по явной просьбе |
+| `size` | нет | Только для v1-моделей: `1024x1024`, `1024x1536` (портрет), `1536x1024` (баннер) |
+| `quality` | нет | Только для `gpt-image-2`: `low`, `medium`, `high`, `auto` |
 | `count` | нет | 1–4 варианта; сохраняются как `_v1`, `_v2`, … |
 
 Формула промпта — шесть блоков через запятую:
@@ -177,8 +184,9 @@ clean white background, no text, no watermark
 
 - Пишите по-английски — модели понимают его точнее.
 - 1–3 предложения; конкретика вместо оценок («isometric 3D icon» лучше, чем «красивая иконка»).
-- Текста на картинке почти всегда лучше избегать: `no text, no letters`.
-- `size` у Gemini-моделей молча отбрасывается (они его не принимают) — это не ошибка.
+- Текста на картинке почти всегда лучше избегать: `no text, no letters` (исключение — гайдлайны/баннеры,
+  где текст требуется; тогда используйте `gpt-image-2`).
+- `size` молча игнорируется /media-моделями (им используется `aspect_ratio`/`resolution`) — это не ошибка.
 
 Готовые шаблоны:
 
@@ -195,10 +203,11 @@ UI-иконка:        <предмет>, isometric 3D icon, rounded corners, su
 
 ### `edit_image` — правка существующей
 
-`input_path` — картинка в проекте, `prompt` — инструкция в повелительном
-наклонении: `keep the composition and the character, replace the background with
-a night city skyline`. Модель — только chat-контур (`gemini-…-image-preview`);
-`gpt-image-2` опорные изображения не принимает и скажет об этом сразу.
+`input_path` — картинка в проекте (путь относительно `NORDROUTER_PROJECT_ROOT`),
+`prompt` — инструкция в повелительном наклонении: `keep the composition and the
+character, replace the background with a night city skyline`. Модель по умолчанию
+`gpt-image-2` — она же лучше всего работает с редактированием. Все модели из
+каталога поддерживают i2i; сервер сам выбирает нужный контур.
 
 ### `batch_generate` — сравнение моделей
 
@@ -212,11 +221,12 @@ a night city skyline`. Модель — только chat-контур (`gemini-
 
 ```text
 Сгенерируй hero-баннер для лендинга: закат над горами, плоская векторная
-иллюстрация, место слева под заголовок. Сохрани в public/images/hero.png,
-модель openai/gpt-image-2, размер 1536x1024.
+иллюстрация, место слева под заголовок. Сохрани в landing-kit/public/images/hero.png.
 ```
 
-Агент сам вызовет `mev-nordrouter-img → generate_image` с нужными параметрами.
+Агент сам вызовет `mev-nordrouter-img → generate_image` с дефолтными параметрами
+(`model=gpt-image-2`, `resolution=1k`). Указывать модель и разрешение нужно
+только если пользователь явно просит другое.
 
 ## Локальный запуск / проверка
 
@@ -241,10 +251,13 @@ imgRouter-mcp/
 │   ├── generate.py        # generate_image
 │   ├── edit.py            # edit_image
 │   ├── models.py          # list_image_models
-│   └── batch.py           # batch_generate
+│   ├── batch.py           # batch_generate
+│   ├── upscale.py         # upscale_image
+│   └── remove_bg.py       # remove_background
 └── utils/
     ├── api_client.py      # NordRouterClient (chat/images, загрузка изображений)
     ├── config.py          # загрузка конфигурации
+    ├── model_families.py  # каталог моделей, резолвинг имён и контуров
     ├── model_profiles.py  # какие параметры принимает каждая модель
     └── image_processor.py # форматы, base64, сохранение, конвертация
 ```

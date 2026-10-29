@@ -13,13 +13,18 @@ async def generate_image(
     prompt: Annotated[str, Field(description="Text description of the image to generate.")],
     output_path: Annotated[
         str,
-        Field(description="Path to save the image(s), relative to the project root (e.g. public/images/logo.png)."),
+        Field(description=(
+            "Path to save the image(s), relative to the project root configured in NORDROUTER_PROJECT_ROOT "
+            "(currently /Users/evmelnik/Documents/aiDev). For example: 'Chats/banner.png' saves to "
+            "/Users/evmelnik/Documents/aiDev/Chats/banner.png. Always include the subdirectory of the target project."
+        )),
     ],
     model: Annotated[
         str,
         Field(description=(
-            "Model family or exact gateway ID. Short names: 'gpt-image-2', 'nano-banana-pro', "
-            "'grok', 'qwen3-pro'. The server auto-selects the correct gateway endpoint."
+            "Model family or exact gateway ID. DEFAULT: 'gpt-image-2'. "
+            "Only use other models ('nano-banana-pro', 'grok', 'qwen3-pro') if the user explicitly asks for them. "
+            "The server auto-selects the correct gateway endpoint."
         )),
     ] = "gpt-image-2",
     aspect_ratio: Annotated[
@@ -28,7 +33,11 @@ async def generate_image(
     ] = "1:1",
     resolution: Annotated[
         str,
-        Field(description="Resolution tier for /media models ('1k', '2k', '4k'). Ignored for v1 models."),
+        Field(description=(
+            "Resolution tier for /media models. DEFAULT: '1k' (web-optimized). "
+            "Use '2k' only if user explicitly requests higher quality. Never use '4k' unless explicitly asked. "
+            "Ignored for v1 models."
+        )),
     ] = "1k",
     size: Annotated[
         Optional[str],

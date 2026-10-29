@@ -264,6 +264,56 @@ class NordRouterClient:
         img.cost_rub = round(0.05 * self._config.usd_rub, 2)
         return img
 
+    @staticmethod
+    def _aspect_to_v1_size(aspect_ratio: str) -> str:
+        """Convert aspect ratio to OpenAI v1-compatible size string.
+        GPT Image 2 supports: 1024x1024, 1536x1024 (landscape), 1024x1536 (portrait)."""
+        landscape = {"16:9", "21:9", "4:3", "5:4"}
+        portrait = {"9:16", "3:4", "4:5"}
+        if aspect_ratio in landscape:
+            return "1536x1024"
+        if aspect_ratio in portrait:
+            return "1024x1536"
+        return "1024x1024"
+
+    # Standard aspect ratios accepted by the NordRouter /media pipeline.
+    _STANDARD_ASPECT_RATIOS: tuple[str, ...] = (
+        "1:1", "16:9", "9:16", "4:3", "3:4", "3:2", "2:3", "5:4", "4:5", "21:9",
+    )
+
+    @classmethod
+    def _normalize_aspect_ratio(cls, aspect_ratio: str) -> str:
+        """Snap a possibly custom aspect ratio (e.g. '1620:1087') to the nearest
+        standard ratio accepted by the NordRouter /media pipeline.
+
+        The web UI sends exact pixel ratios when the user picks 'Auto' with a
+        reference image; the gateway rejects anything outside its whitelist.
+        """
+        ar = (aspect_ratio or "").strip()
+        if ar in cls._STANDARD_ASPECT_RATIOS:
+            return ar
+        try:
+            parts = ar.split(":")
+            if len(parts) != 2:
+                return "1:1"
+            w, h = float(parts[0]), float(parts[1])
+            if w <= 0 or h <= 0:
+                return "1:1"
+            ratio = w / h
+        except (ValueError, ZeroDivisionError):
+            return "1:1"
+
+        # Map each standard ratio to its numeric value and pick the closest.
+        best = "1:1"
+        best_diff = float("inf")
+        for std in cls._STANDARD_ASPECT_RATIOS:
+            sw, sh = std.split(":")
+            diff = abs(ratio - float(sw) / float(sh))
+            if diff < best_diff:
+                best_diff = diff
+                best = std
+        return best
+
     # -- high-level unified interface -------------------------------------
     async def generate(
         self,
@@ -281,16 +331,17 @@ class NordRouterClient:
 
         for _ in range(max(1, int(n))):
             if resolved.contour == "v1":
+                v1_size = size or self._aspect_to_v1_size(aspect_ratio)
                 img = await self._v1_images_generate(
                     model=resolved.gateway_id,
                     prompt=prompt,
-                    size=size,
+                    size=v1_size,
                     quality=quality,
                 )
             else:
                 input_payload: dict[str, Any] = {
                     "prompt": prompt,
-                    "aspect_ratio": aspect_ratio,
+                    "aspect_ratio": self._normalize_aspect_ratio(aspect_ratio),
                     "resolution": resolution,
                     "safety_filter": self._config.safety_filter,
                 }
@@ -345,7 +396,7 @@ class NordRouterClient:
         input_payload: dict[str, Any] = {
             "prompt": prompt,
             "image": uploaded_url,
-            "aspect_ratio": aspect_ratio,
+            "aspect_ratio": self._normalize_aspect_ratio(aspect_ratio),
             "resolution": resolution,
             "safety_filter": self._config.safety_filter,
         }

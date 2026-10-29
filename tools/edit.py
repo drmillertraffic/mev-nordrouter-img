@@ -17,18 +17,25 @@ from utils.image_processor import (
 async def edit_image(
     input_path: Annotated[
         str,
-        Field(description="Path to the source image, relative to the project root."),
+        Field(description=(
+            "Path to the source image, relative to the project root configured in NORDROUTER_PROJECT_ROOT "
+            "(currently /Users/evmelnik/Documents/aiDev). For example: 'Chats/photo.jpg'."
+        )),
     ],
     prompt: Annotated[str, Field(description="Editing instruction describing the desired change.")],
     output_path: Annotated[
         Optional[str],
-        Field(description="Path to save the result. Defaults to the input path with an '_edited' suffix."),
+        Field(description=(
+            "Path to save the result, relative to NORDROUTER_PROJECT_ROOT. "
+            "Defaults to the input path with an '_edited' suffix."
+        )),
     ] = None,
     model: Annotated[
         str,
         Field(description=(
-            "Model family or exact gateway ID for editing. Short names: 'gpt-image-2', "
-            "'nano-banana-pro', 'grok', 'qwen3-pro'. The server auto-selects the correct i2i endpoint."
+            "Model family or exact gateway ID for editing. DEFAULT: 'gpt-image-2'. "
+            "Only use other models ('nano-banana-pro', 'grok', 'qwen3-pro') if the user explicitly asks for them. "
+            "The server auto-selects the correct i2i endpoint."
         )),
     ] = "gpt-image-2",
     aspect_ratio: Annotated[
@@ -37,7 +44,11 @@ async def edit_image(
     ] = "1:1",
     resolution: Annotated[
         str,
-        Field(description="Resolution tier for /media models ('1k', '2k', '4k'). Ignored for v1 models."),
+        Field(description=(
+            "Resolution tier for /media models. DEFAULT: '1k' (web-optimized). "
+            "Use '2k' only if user explicitly requests higher quality. Never use '4k' unless explicitly asked. "
+            "Ignored for v1 models."
+        )),
     ] = "1k",
 ) -> dict:
     """Edit an existing image using any supported model family with automatic contour routing."""

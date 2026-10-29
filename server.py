@@ -23,9 +23,11 @@ mcp = MCPServer(
     name="mev-nordrouter-img",
     title="NordRouter Image Generation",
     description=(
-        "Generate and edit images via the NordRouter API using Gemini image models "
-        "(chat/completions) and GPT Image 2 (images/generations), with multi-variant "
-        "and multi-model batch support."
+        "Generate and edit images via the NordRouter API. "
+        "DEFAULT MODEL: gpt-image-2 — always use it unless the user explicitly requests another model. "
+        "DEFAULT RESOLUTION: 1k (web-optimized) — never use 2k/4k unless explicitly asked. "
+        "Other available models (nano-banana-pro, grok, qwen3-pro) are for comparison or special cases only. "
+        "Supports multi-variant generation and multi-model batch."
     ),
     version="1.0.0",
 )

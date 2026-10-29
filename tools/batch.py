@@ -20,16 +20,25 @@ async def batch_generate(
     models: Annotated[
         list[str],
         Field(description=(
-            "List of model families or gateway IDs to use, e.g. "
-            "['gpt-image-2', 'nano-banana-pro', 'grok', 'qwen3-pro']."
+            "List of model families or gateway IDs to use. Use ONLY when the user explicitly asks to compare models. "
+            "For single-model generation, use generate_image with default 'gpt-image-2' instead."
         )),
     ],
     output_dir: Annotated[
         str,
-        Field(description="Directory to save results, relative to the project root."),
+        Field(description=(
+            "Directory to save results, relative to NORDROUTER_PROJECT_ROOT "
+            "(currently /Users/evmelnik/Documents/aiDev). Include the project subdirectory, e.g. 'Chats/banners/'."
+        )),
     ],
     aspect_ratio: Annotated[str, Field(description="Aspect ratio for /media models.")] = "1:1",
-    resolution: Annotated[str, Field(description="Resolution tier for /media models ('1k', '2k', '4k').")] = "1k",
+    resolution: Annotated[
+        str,
+        Field(description=(
+            "Resolution tier for /media models. DEFAULT: '1k' (web-optimized). "
+            "Use '2k' only if user explicitly requests higher quality. Never use '4k' unless explicitly asked."
+        )),
+    ] = "1k",
     size: Annotated[Optional[str], Field(description="Exact size for v1 models.")] = None,
 ) -> dict:
     """Generate an image with several models at once and save each result.

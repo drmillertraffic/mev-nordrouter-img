@@ -1,0 +1,264 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>NordRouter — Генерация изображений</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+  <div id="app" class="app">
+
+    <!-- ===== LOGIN SCREEN ===== -->
+    <div id="screen-login" class="login-screen">
+      <div class="login-card">
+        <div class="login-card__title">NordRouter</div>
+        <div class="input-group">
+          <label class="input-label" for="login-password">Пароль доступа</label>
+          <input id="login-password" class="input" type="password" placeholder="Введите пароль" autocomplete="current-password">
+        </div>
+        <button id="login-btn" class="btn btn--primary btn--full mt-4" onclick="App.login()">Войти</button>
+        <div id="login-error" class="login-card__error">Неверный пароль</div>
+      </div>
+    </div>
+
+    <!-- ===== MAIN APP (hidden until logged in) ===== -->
+    <div id="app-main" class="hidden" style="display:flex;flex-direction:column;min-height:100vh;">
+
+      <!-- Header -->
+      <header class="header">
+        <div class="header__logo">NordRouter</div>
+        <nav class="header__nav">
+          <button class="header__nav-btn active" data-screen="generate" onclick="App.navigate('generate')">Генерация</button>
+          <button class="header__nav-btn" data-screen="history" onclick="App.navigate('history')">История</button>
+          <button class="header__nav-btn" data-screen="templates" onclick="App.navigate('templates')">Шаблоны и стили</button>
+        </nav>
+        <div class="header__actions">
+          <button class="btn btn--ghost btn--icon" title="Выйти" onclick="App.logout()">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+          </button>
+        </div>
+      </header>
+
+      <!-- ===== GENERATE SCREEN ===== -->
+      <div id="screen-generate" class="generate-layout">
+        <!-- Left panel -->
+        <aside class="generate-panel" id="gen-panel">
+          <!-- Template selector -->
+          <div class="form-section">
+            <div class="form-section__header">
+              <span class="form-section__label">Шаблон</span>
+              <button class="btn btn--ghost text-caption hidden" id="template-reset" onclick="App.resetTemplate()">Сбросить</button>
+            </div>
+            <div class="dropdown" id="template-dropdown">
+              <button class="dropdown__trigger" onclick="App.toggleDropdown('template-dropdown')">
+                <span id="template-label">Без шаблона</span>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>
+              </button>
+              <div class="dropdown__menu" id="template-menu"></div>
+            </div>
+          </div>
+
+          <!-- Template variables (hidden by default) -->
+          <div id="template-vars" class="hidden" style="display:flex;flex-direction:column;gap:var(--space-3);"></div>
+
+          <!-- Prompt -->
+          <div class="form-section">
+            <label class="form-section__label" for="gen-prompt">Промт (контент)</label>
+            <textarea id="gen-prompt" class="input textarea" placeholder="Опишите изображение, которое хотите создать..." rows="4"></textarea>
+          </div>
+
+          <!-- Style templates (checkboxes) -->
+          <div class="form-section">
+            <div class="form-section__header">
+              <span class="form-section__label">🎨 Стили</span>
+              <span class="text-caption text-muted" id="style-count-label"></span>
+            </div>
+            <div id="style-checkboxes" class="style-checkboxes"></div>
+          </div>
+
+          <!-- References -->
+          <div class="form-section">
+            <label class="form-section__label">Референсы</label>
+            <div class="upload-zone" id="upload-zone"
+                 onclick="document.getElementById('ref-input').click()"
+                 ondragover="event.preventDefault();this.classList.add('dragover')"
+                 ondragleave="this.classList.remove('dragover')"
+                 ondrop="event.preventDefault();this.classList.remove('dragover');App.handleRefDrop(event)">
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="margin:0 auto var(--space-2)"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+              Перетащите или кликните для загрузки
+            </div>
+            <input type="file" id="ref-input" multiple accept="image/*" style="display:none" onchange="App.handleRefFiles(this.files)">
+            <div class="ref-thumbs" id="ref-thumbs"></div>
+          </div>
+
+          <!-- Models -->
+          <div class="form-section">
+            <div class="form-section__header">
+              <span class="form-section__label">Модели</span>
+            </div>
+            <button class="dropdown__trigger" id="models-trigger" onclick="App.toggleModelPanel()">
+              <span id="models-label">Выбрать модели</span>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>
+            </button>
+            <div class="model-chips" id="model-chips"></div>
+            <div class="model-panel" id="model-panel">
+              <input class="input" id="model-search" placeholder="Поиск моделей..." oninput="App.filterModels(this.value)" style="margin-bottom:var(--space-2)">
+              <div id="model-list"></div>
+            </div>
+          </div>
+
+          <!-- Variants per model -->
+          <div class="form-section">
+            <label class="form-section__label">Вариантов на модель</label>
+            <div class="stepper">
+              <button class="stepper__btn" onclick="App.stepVariants(-1)">−</button>
+              <div class="stepper__value" id="variants-value">1</div>
+              <button class="stepper__btn" onclick="App.stepVariants(1)">+</button>
+            </div>
+          </div>
+
+          <!-- Aspect ratio -->
+          <div class="form-section">
+            <label class="form-section__label">Пропорции</label>
+            <div class="dropdown" id="aspect-dropdown">
+              <button class="dropdown__trigger" onclick="App.toggleDropdown('aspect-dropdown')">
+                <span id="aspect-label" style="display:flex;align-items:center;gap:var(--space-2)">
+                  <span class="aspect-icon" id="aspect-icon-preview"></span>
+                  <span id="aspect-text">1:1</span>
+                </span>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>
+              </button>
+              <div class="dropdown__menu" id="aspect-menu"></div>
+            </div>
+          </div>
+
+          <!-- Resolution -->
+          <div class="form-section">
+            <label class="form-section__label">Разрешение</label>
+            <div class="segmented" id="resolution-segmented">
+              <button class="segmented__btn active" data-res="1k" onclick="App.setResolution('1k')">1K</button>
+              <button class="segmented__btn" data-res="2k" onclick="App.setResolution('2k')">2K</button>
+              <button class="segmented__btn" data-res="4k" onclick="App.setResolution('4k')">4K</button>
+            </div>
+          </div>
+
+          <!-- Additional (collapsible) -->
+          <div class="form-section">
+            <div class="collapsible__header" onclick="App.toggleCollapsible('additional')">
+              <span>Дополнительно</span>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>
+            </div>
+            <div class="collapsible__body" id="additional-body">
+              <div class="input-group">
+                <label class="input-label">Формат файла</label>
+                <div class="segmented" id="format-segmented">
+                  <button class="segmented__btn active" data-fmt="png" onclick="App.setFormat('png')">PNG</button>
+                  <button class="segmented__btn" data-fmt="jpeg" onclick="App.setFormat('jpeg')">JPEG</button>
+                </div>
+              </div>
+              <div style="display:flex;align-items:center;justify-content:space-between;">
+                <span class="text-small text-secondary">Улучшить промт</span>
+                <div class="toggle" id="enhance-toggle" onclick="App.toggleEnhance()">
+                  <div class="toggle__knob"></div>
+                </div>
+              </div>
+              <div class="input-group">
+                <label class="input-label" for="gen-comment">Комментарий</label>
+                <input id="gen-comment" class="input" type="text" placeholder="Метка для себя...">
+              </div>
+            </div>
+          </div>
+
+          <!-- Generate button -->
+          <button id="gen-btn" class="btn btn--primary btn--lg btn--full" disabled onclick="App.generate()">
+            <span id="gen-btn-text">Сгенерировать</span>
+          </button>
+          <div id="gen-calc" class="text-caption text-muted text-center"></div>
+        </aside>
+
+        <!-- Right feed -->
+        <main class="generate-feed" id="gen-feed">
+          <div class="text-muted text-center" style="margin-top:auto;margin-bottom:auto;" id="feed-empty">
+            <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1" style="margin:0 auto var(--space-3);opacity:0.3"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="m21 15-5-5L5 21"/></svg>
+            <div>Результаты генерации появятся здесь</div>
+          </div>
+        </main>
+      </div>
+
+      <!-- ===== HISTORY SCREEN ===== -->
+      <div id="screen-history" class="hidden" style="display:flex;flex-direction:column;flex:1;overflow:hidden;">
+        <div class="history-filters">
+          <input class="input" id="history-search" placeholder="Поиск по промту..." style="max-width:300px" oninput="App.filterHistory()">
+          <div class="dropdown" id="history-model-filter" style="min-width:160px">
+            <button class="dropdown__trigger" onclick="App.toggleDropdown('history-model-filter')">
+              <span>Все модели</span>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>
+            </button>
+            <div class="dropdown__menu"></div>
+          </div>
+          <input class="input" id="history-date-from" type="date" style="max-width:160px" onchange="App.filterHistory()">
+          <input class="input" id="history-date-to" type="date" style="max-width:160px" onchange="App.filterHistory()">
+        </div>
+        <div class="history-list" id="history-list"></div>
+      </div>
+
+      <!-- ===== TEMPLATES SCREEN ===== -->
+      <div id="screen-templates" class="hidden" style="display:flex;flex-direction:column;flex:1;overflow:hidden;">
+        <div class="templates-content">
+          <section class="templates-section">
+            <h2 class="templates-section__title">📋 Шаблоны</h2>
+            <div class="templates-grid" id="templates-grid"></div>
+          </section>
+          <section class="templates-section">
+            <div class="templates-section__header">
+              <h2 class="templates-section__title">🎨 Стили</h2>
+              <button class="btn btn--primary text-caption" onclick="App.createStyle()">+ Создать стиль</button>
+            </div>
+            <div class="styles-grid" id="styles-grid"></div>
+          </section>
+        </div>
+      </div>
+
+      <!-- Mobile bottom nav -->
+      <nav class="mobile-nav">
+        <div class="mobile-nav__items">
+          <button class="mobile-nav__item active" data-screen="generate" onclick="App.navigate('generate')">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="m21 15-5-5L5 21"/></svg>
+            Генерация
+          </button>
+          <button class="mobile-nav__item" data-screen="history" onclick="App.navigate('history')">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+            История
+          </button>
+          <button class="mobile-nav__item" data-screen="templates" onclick="App.navigate('templates')">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>
+            Шаблоны и стили
+          </button>
+        </div>
+      </nav>
+    </div>
+
+    <!-- Lightbox -->
+    <div class="lightbox" id="lightbox" onclick="App.closeLightbox(event)">
+      <button class="lightbox__close" onclick="App.closeLightbox()">✕</button>
+      <button class="lightbox__nav lightbox__nav--prev" onclick="event.stopPropagation();App.lightboxNav(-1)">‹</button>
+      <img class="lightbox__img" id="lightbox-img" src="" alt="">
+      <button class="lightbox__nav lightbox__nav--next" onclick="event.stopPropagation();App.lightboxNav(1)">›</button>
+      <a class="lightbox__download btn btn--secondary" id="lightbox-download" download>
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+        Скачать
+      </a>
+    </div>
+
+    <!-- Toast container -->
+    <div class="toast-container" id="toast-container"></div>
+  </div>
+
+  <script src="js/api.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>

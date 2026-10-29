@@ -22,6 +22,7 @@ class ModelFamily:
     est_usd_i2i: float | None
     description: str
     aliases: tuple[str, ...] = ()
+    i2i_contour: Contour | None = None  # Override contour for i2i mode (e.g. GPT Image 2: v1 for t2i, media for i2i)
 
     @property
     def can_generate(self) -> bool:
@@ -39,23 +40,24 @@ CATALOG: tuple[ModelFamily, ...] = (
         vendor="OpenAI",
         contour="v1",
         t2i_id="openai/gpt-image-2",
-        i2i_id="openai/gpt-image-2",
+        i2i_id="image/gpt-image-2-edit",
         est_usd_t2i=0.05,
         est_usd_i2i=0.0375,
         description="OpenAI: фотореализм, текст на картинках, редактирование. До 4K.",
         aliases=("openai/gpt-image-2", "gpt-image", "gpt2"),
+        i2i_contour="media",
     ),
     ModelFamily(
-        id="nano-banana-pro",
-        name="Nano Banana Pro",
+        id="nano-banana-2.1",
+        name="Nano Banana 2.1",
         vendor="Google",
         contour="media",
-        t2i_id="image/nano-banana-pro",
+        t2i_id="image/nano-banana-2.1",
         i2i_id="image/nano-banana-edit",
-        est_usd_t2i=0.1125,
+        est_usd_t2i=0.025,
         est_usd_i2i=0.025,
-        description="Google Imagen 3 (Pro): высокая детализация, реалистичные текстуры.",
-        aliases=("image/nano-banana-pro", "nano-banana", "nano-banana-edit"),
+        description="Google Imagen 3 (2.1): быстрая генерация, хорошее качество, низкая цена.",
+        aliases=("image/nano-banana-2.1", "nano-banana-2.1", "nano-banana", "nano-banana-2.1-edit"),
     ),
     ModelFamily(
         id="grok",
@@ -104,6 +106,18 @@ CATALOG: tuple[ModelFamily, ...] = (
         est_usd_i2i=0.0063,
         description="Recraft: аккуратное удаление фона с сохранением мелких деталей.",
         aliases=("image/recraft-remove-bg", "remove-bg", "remove_bg"),
+    ),
+    ModelFamily(
+        id="nano-banana-pro",
+        name="Nano Banana Pro",
+        vendor="Google",
+        contour="media",
+        t2i_id="image/nano-banana-pro",
+        i2i_id="image/nano-banana-edit",
+        est_usd_t2i=0.1125,
+        est_usd_i2i=0.025,
+        description="Google Imagen 3 (Pro): максимальная детализация, премиум-качество.",
+        aliases=("image/nano-banana-pro", "nano-banana-pro", "nano-banana-edit"),
     ),
 )
 
@@ -174,7 +188,7 @@ def resolve_model(name_or_id: str | None, mode: Mode = "t2i") -> ResolvedModel:
         return ResolvedModel(
             family=family,
             gateway_id=family.i2i_id,  # type: ignore[arg-type]
-            contour=family.contour,
+            contour=family.i2i_contour or family.contour,
             mode=mode,
             est_usd=family.est_usd_i2i,
         )
