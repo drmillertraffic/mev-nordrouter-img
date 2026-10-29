@@ -19,7 +19,7 @@ from pydantic import BaseModel
 
 from utils.api_client import NordRouterClient
 from utils.config import get_config
-from utils.model_families import format_catalog_for_user
+from utils.model_families import format_catalog_for_user, find_family
 
 app = FastAPI(title="NordRouter Web UI")
 
@@ -96,6 +96,85 @@ def _resolve_reference(ref: str) -> tuple[str, str | None]:
 
     logger.warning("_resolve_reference: image not found on disk for %s", ref)
     return ref, None
+
+
+def _composite_references(data_urls: list[str]) -> str:
+    """Composite multiple reference images into a single labeled grid image.
+
+    Creates a horizontal strip with each image labeled "Изображение 1", "Изображение 2", etc.
+    Returns a data URL of the composite PNG.
+
+    This is used as a fallback when the selected model only supports a single
+    reference image but the user attached multiple references.
+    """
+    from PIL import Image, ImageDraw, ImageFont
+    import io
+
+    images = []
+    for du in data_urls:
+        header, _, b64 = du.partition(",")
+        if not b64:
+            continue
+        try:
+            img = Image.open(io.BytesIO(base64.b64decode(b64))).convert("RGB")
+            images.append(img)
+        except Exception as e:
+            logger.warning("_composite_references: failed to decode image: %s", e)
+
+    if len(images) <= 1:
+        return data_urls[0] if data_urls else ""
+
+    # Target height for each thumbnail (keep reasonable size)
+    target_h = 512
+    label_h = 36  # height for the label bar below each image
+    gap = 8       # gap between images
+
+    # Resize all images to the same height, preserving aspect ratio
+    resized = []
+    for img in images:
+        ratio = target_h / img.height
+        new_w = int(img.width * ratio)
+        resized.append(img.resize((new_w, target_h), Image.LANCZOS))
+
+    total_w = sum(r.width for r in resized) + gap * (len(resized) - 1)
+    canvas_h = target_h + label_h
+
+    canvas = Image.new("RGB", (total_w, canvas_h), (255, 255, 255))
+    draw = ImageDraw.Draw(canvas)
+
+    # Try to load a font
+    try:
+        font = ImageFont.truetype("/System/Library/Fonts/Helvetica.ttc", 24)
+    except Exception:
+        try:
+            font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 24)
+        except Exception:
+            font = ImageFont.load_default()
+
+    x_offset = 0
+    for i, img in enumerate(resized):
+        canvas.paste(img, (x_offset, 0))
+        # Draw label below the image
+        label = f"Изображение {i + 1}"
+        bbox = draw.textbbox((0, 0), label, font=font)
+        tw = bbox[2] - bbox[0]
+        lx = x_offset + (img.width - tw) // 2
+        ly = target_h + 4
+        draw.text((lx, ly), label, fill=(0, 0, 0), font=font)
+        x_offset += img.width + gap
+
+    buf = io.BytesIO()
+    canvas.save(buf, format="PNG")
+    b64_out = base64.b64encode(buf.getvalue()).decode()
+    return f"data:image/png;base64,{b64_out}"
+
+
+def _get_max_i2i_images(model_id: str) -> int:
+    """Return how many reference images a model's i2i endpoint accepts."""
+    family = find_family(model_id)
+    if family and family.can_edit:
+        return family.max_i2i_images
+    return 1  # Default: single image
 
 
 cfg = get_config()
@@ -186,13 +265,52 @@ async def _run_generation(gen_id: str):
             try:
                 gen["cards"][idx]["status"] = "generating"
                 if refs:
-                    # Use first reference for edit mode
-                    result = await client.edit(
-                        model=model_id, prompt=params["prompt"],
-                        image_data_url=refs[0],
-                        aspect_ratio=params["aspect_ratio"],
-                        resolution=params["resolution"],
-                    )
+                    family = find_family(model_id)
+                    can_edit = family and family.can_edit
+
+                    if not can_edit:
+                        # Model does not support edit endpoint but accepts image in generate.
+                        # Upload all refs, use first one as reference for generation.
+                        uploaded_urls = []
+                        for ref_data_url in refs:
+                            uploaded_urls.append(await client.upload_media_image(ref_data_url))
+                        result = await client.generate_with_refs(
+                            model=model_id, prompt=params["prompt"],
+                            image_urls=uploaded_urls,
+                            aspect_ratio=params["aspect_ratio"],
+                            resolution=params["resolution"],
+                        )
+                    else:
+                        # Determine how many reference images this model supports.
+                        max_refs = _get_max_i2i_images(model_id)
+                        if len(refs) <= max_refs:
+                            # Model natively supports all references — pass them all.
+                            edit_refs = refs
+                            edit_prompt = params["prompt"]
+                        else:
+                            # Model only supports fewer images than provided.
+                            # Composite all references into a single labeled grid image
+                            # and prepend an explanatory prefix to the prompt so the
+                            # model can still distinguish between them.
+                            logger.info(
+                                "Model %s supports %d ref(s) but %d provided — compositing",
+                                model_id, max_refs, len(refs),
+                            )
+                            composite_url = _composite_references(refs)
+                            edit_refs = [composite_url] if composite_url else refs[:max_refs]
+                            n_labels = ", ".join(f"изображение {i+1}" for i in range(len(refs)))
+                            edit_prompt = (
+                                f"[На входном изображении слева направо расположены: {n_labels}. "
+                                f"Используй их в соответствии с инструкцией ниже.]\n\n"
+                                + params["prompt"]
+                            )
+
+                        result = await client.edit(
+                            model=model_id, prompt=edit_prompt,
+                            image_data_url=edit_refs,
+                            aspect_ratio=params["aspect_ratio"],
+                            resolution=params["resolution"],
+                        )
                 else:
                     results = await client.generate(
                         model=model_id, prompt=params["prompt"],
@@ -248,9 +366,22 @@ async def retry_single(req: RetryRequest, _=Depends(verify_token)):
                 logger.warning("retry: reference could not be resolved to a data URL: %s", r[:80])
 
         if refs_data:
+            max_refs = _get_max_i2i_images(req.model)
+            if len(refs_data) <= max_refs:
+                edit_refs = refs_data
+                edit_prompt = req.prompt
+            else:
+                composite_url = _composite_references(refs_data)
+                edit_refs = [composite_url] if composite_url else refs_data[:max_refs]
+                n_labels = ", ".join(f"изображение {i+1}" for i in range(len(refs_data)))
+                edit_prompt = (
+                    f"[На входном изображении слева направо расположены: {n_labels}. "
+                    f"Используй их в соответствии с инструкцией ниже.]\n\n"
+                    + req.prompt
+                )
             result = await client.edit(
-                model=req.model, prompt=req.prompt,
-                image_data_url=refs_data[0],
+                model=req.model, prompt=edit_prompt,
+                image_data_url=edit_refs,
                 aspect_ratio=req.aspect_ratio,
                 resolution=req.resolution,
             )

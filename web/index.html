@@ -7,7 +7,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="css/styles.css">
+  <link rel="stylesheet" href="css/styles.css?v=2">
 </head>
 <body>
   <div id="app" class="app">
@@ -88,8 +88,8 @@
                  ondragover="event.preventDefault();this.classList.add('dragover')"
                  ondragleave="this.classList.remove('dragover')"
                  ondrop="event.preventDefault();this.classList.remove('dragover');App.handleRefDrop(event)">
-              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="margin:0 auto var(--space-2)"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
-              Перетащите или кликните для загрузки
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+              <span>Перетащите или кликните для загрузки</span>
             </div>
             <input type="file" id="ref-input" multiple accept="image/*" style="display:none" onchange="App.handleRefFiles(this.files)">
             <div class="ref-thumbs" id="ref-thumbs"></div>
@@ -173,10 +173,15 @@
             </div>
           </div>
 
-          <!-- Generate button -->
-          <button id="gen-btn" class="btn btn--primary btn--lg btn--full" disabled onclick="App.generate()">
-            <span id="gen-btn-text">Сгенерировать</span>
-          </button>
+          <!-- Generate button row -->
+          <div style="display:flex;gap:var(--space-2);align-items:stretch;">
+            <button id="gen-btn" class="btn btn--primary btn--lg" style="flex:1;" disabled onclick="App.generate()">
+              <span id="gen-btn-text">Сгенерировать</span>
+            </button>
+            <button id="reset-btn" class="btn-reset" title="Сбросить все параметры" onclick="App.confirmReset()">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>
+            </button>
+          </div>
           <div id="gen-calc" class="text-caption text-muted text-center"></div>
         </aside>
 
@@ -242,6 +247,18 @@
       </nav>
     </div>
 
+    <!-- Reset confirm dialog -->
+    <div class="confirm-dialog" id="reset-dialog" onclick="App.closeResetDialog(event)">
+      <div class="confirm-dialog__box" role="dialog" aria-modal="true" aria-labelledby="reset-dialog-title">
+        <div class="confirm-dialog__title" id="reset-dialog-title">Сбросить всё?</div>
+        <div class="confirm-dialog__text">Промт, референсы, стили и все параметры будут возвращены к значениям по умолчанию.</div>
+        <div class="confirm-dialog__actions">
+          <button class="btn btn--secondary" id="reset-no" onclick="App.closeResetDialog()">Нет</button>
+          <button class="btn btn--danger" id="reset-yes" onclick="App.resetForm()">Да</button>
+        </div>
+      </div>
+    </div>
+
     <!-- Lightbox -->
     <div class="lightbox" id="lightbox" onclick="App.closeLightbox(event)">
       <button class="lightbox__close" onclick="App.closeLightbox()">✕</button>
@@ -258,7 +275,7 @@
     <div class="toast-container" id="toast-container"></div>
   </div>
 
-  <script src="js/api.js"></script>
-  <script src="js/app.js"></script>
+  <script src="js/api.js?v=2"></script>
+  <script src="js/app.js?v=2"></script>
 </body>
 </html>

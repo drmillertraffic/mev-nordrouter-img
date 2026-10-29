@@ -63,10 +63,24 @@ const App = {
           menu.classList.remove('open');
         }
       });
+      // Close model panel when clicking outside the models form-section
+      const modelPanel = document.getElementById('model-panel');
+      if (modelPanel && modelPanel.classList.contains('open')) {
+        const modelsSection = document.getElementById('models-trigger')?.closest('.form-section');
+        if (!modelsSection || !modelsSection.contains(e.target)) {
+          modelPanel.classList.remove('open');
+        }
+      }
     });
 
-    // Keyboard for lightbox
+    // Keyboard for lightbox & reset dialog
     document.addEventListener('keydown', (e) => {
+      // Reset dialog shortcuts
+      const resetDialog = document.getElementById('reset-dialog');
+      if (resetDialog && resetDialog.classList.contains('open')) {
+        if (e.key === 'Escape') this.closeResetDialog();
+        return;
+      }
       if (!document.getElementById('lightbox').classList.contains('open')) return;
       if (e.key === 'Escape') this.closeLightbox();
       if (e.key === 'ArrowLeft') this.lightboxNav(-1);
@@ -175,13 +189,20 @@ const App = {
       const checked = this.state.selectedModels.includes(m.id);
       const isFav = favs.includes(m.id);
       const canEdit = (m.modes || []).includes('edit');
+      const maxRefs = m.max_i2i_images || 1;
+      const multiRef = maxRefs > 1;
       const priceUsd = m.price && m.price.usd ? m.price.usd : '';
       const priceRub = m.price && m.price.rub ? m.price.rub : '';
       const priceLabel = priceUsd && priceRub ? `${priceUsd} (${priceRub})` : (priceRub || priceUsd || '');
+      const refBadge = canEdit
+        ? (multiRef
+            ? `<span class="badge badge--green text-caption">до ${maxRefs} фото</span>`
+            : `<span class="badge badge--blue text-caption">текст+фото</span>`)
+        : `<span class="badge badge--blue text-caption">только текст</span>`;
       return `<div class="model-item" onclick="App.toggleModel('${m.id}')">
         <div class="model-item__checkbox ${checked ? 'checked' : ''}">${checked ? '✓' : ''}</div>
         <span class="model-item__name">${m.name}${priceLabel ? ` <span class="model-item__price text-muted text-caption">${this._escapeHtml(priceLabel)}</span>` : ''}</span>
-        <span class="badge badge--blue text-caption">${canEdit ? 'текст+фото' : 'только текст'}</span>
+        ${refBadge}
         <span class="model-item__star ${isFav ? 'active' : ''}" onclick="event.stopPropagation();App.toggleFav('${m.id}')">★</span>
       </div>`;
     }).join('');
@@ -302,6 +323,84 @@ const App = {
     document.getElementById('enhance-toggle').classList.toggle('active', this.state.enhancePrompt);
   },
 
+  // ---- Reset form ----
+  confirmReset() {
+    const dialog = document.getElementById('reset-dialog');
+    if (!dialog) return;
+    dialog.classList.add('open');
+    // Focus the "Да" button so Enter confirms
+    setTimeout(() => {
+      const yesBtn = document.getElementById('reset-yes');
+      if (yesBtn) yesBtn.focus();
+    }, 50);
+  },
+
+  closeResetDialog(event) {
+    const dialog = document.getElementById('reset-dialog');
+    if (!dialog) return;
+    // Close only if clicking on overlay (not inside the box) or called programmatically
+    if (event && event.target !== dialog) return;
+    dialog.classList.remove('open');
+  },
+
+  resetForm() {
+    // Close dialog first
+    const dialog = document.getElementById('reset-dialog');
+    if (dialog) dialog.classList.remove('open');
+
+    // Reset state to defaults
+    this.state.selectedModels = [];
+    this.state.variants = 1;
+    this.state.aspectRatio = '1:1';
+    this.state.resolution = '1k';
+    this.state.format = 'png';
+    this.state.enhancePrompt = false;
+    this.state.references = [];
+    this.state.selectedStyles = [];
+    this.state.activeTemplate = null;
+
+    // Reset DOM elements
+    document.getElementById('gen-prompt').value = '';
+    document.getElementById('gen-prompt').style.height = 'auto';
+    document.getElementById('gen-comment').value = '';
+    document.getElementById('variants-value').textContent = '1';
+    document.getElementById('model-search').value = '';
+
+    // Reset template
+    if (typeof this.resetTemplate === 'function') this.resetTemplate();
+
+    // Reset styles checkboxes
+    this._renderStyleCheckboxes();
+
+    // Reset references
+    this.renderRefThumbs();
+
+    // Reset model selection — default to GPT Image 2 if available
+    if (this.state.models.find(m => m.id === 'gpt-image-2')) {
+      this.state.selectedModels = ['gpt-image-2'];
+    }
+    this.renderModelChips();
+    this.renderModelList('');
+
+    // Reset aspect ratio
+    this.setAspect('1:1');
+
+    // Reset resolution
+    this.setResolution('1k');
+
+    // Reset format
+    this.setFormat('png');
+
+    // Reset enhance toggle
+    document.getElementById('enhance-toggle').classList.remove('active');
+
+    // Update calculations and button state
+    this.updateGenCalc();
+    this.updateGenBtn();
+
+    this.toast('Все параметры сброшены', 'info');
+  },
+
   toggleCollapsible(name) {
     document.getElementById(`${name}-body`).classList.toggle('open');
   },
@@ -417,6 +516,28 @@ const App = {
   async generate() {
     const basePrompt = (document.getElementById('gen-prompt').value || '').trim();
     if (!basePrompt || this.state.selectedModels.length === 0) return;
+
+    // Warn if multiple references are attached but selected models only support one image.
+    if (this.state.references.length > 1) {
+      const limitedModels = this.state.selectedModels.filter(id => {
+        const m = this.state.models.find(x => x.id === id);
+        return m && (m.max_i2i_images || 1) < this.state.references.length;
+      });
+      if (limitedModels.length > 0) {
+        const names = limitedModels.map(id => {
+          const m = this.state.models.find(x => x.id === id);
+          return m ? m.name : id;
+        }).join(', ');
+        const proceed = confirm(
+          '⚠️ Вы прикрепили ' + this.state.references.length + ' изображений, а модели ' + names + ' принимают только 1 входное фото.\n\n' +
+          'Для них все прикреплённые изображения будут автоматически объединены в один лист с подписями «Изображение 1», «Изображение 2» и т.д., чтобы модель понимала, на что вы ссылаетесь в промпте.\n\n' +
+          'Модели с поддержкой нескольких фото (например, Qwen Image 3 Pro) получат их как есть.\n\n' +
+          'Продолжить?'
+        );
+        if (!proceed) return;
+      }
+    }
+
     let aspectRatio = this.state.aspectRatio;
     if (aspectRatio === 'auto' && this.state.references.length > 0) {
       const ref = this.state.references[0];

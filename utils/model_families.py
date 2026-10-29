@@ -23,6 +23,7 @@ class ModelFamily:
     description: str
     aliases: tuple[str, ...] = ()
     i2i_contour: Contour | None = None  # Override contour for i2i mode (e.g. GPT Image 2: v1 for t2i, media for i2i)
+    max_i2i_images: int = 1  # How many reference images the i2i endpoint accepts (1 = single, 2 = image+image2)
 
     @property
     def can_generate(self) -> bool:
@@ -80,8 +81,45 @@ CATALOG: tuple[ModelFamily, ...] = (
         i2i_id="image/qwen3-pro-edit",
         est_usd_t2i=0.0438,
         est_usd_i2i=0.0438,
-        description="Alibaba Qwen 3 Pro: текст на картинках, высокая детализация, сильный i2i.",
+        description="Alibaba Qwen 3 Pro: текст на картинках, высокая детализация, сильный i2i. Поддерживает 2 reference-изображения.",
         aliases=("image/qwen3-pro", "image/qwen3-pro-edit", "qwen3", "qwen"),
+        max_i2i_images=2,
+    ),
+    ModelFamily(
+        id="z-image",
+        name="Z-Image",
+        vendor="Alibaba",
+        contour="media",
+        t2i_id="image/z-image",
+        i2i_id=None,
+        est_usd_t2i=0.005,
+        est_usd_i2i=None,
+        description="Alibaba Z-Image: экспериментальная модель генерации. Поддерживает генерацию с референсами, но не классическое редактирование.",
+        aliases=("image/z-image", "z-image"),
+    ),
+    ModelFamily(
+        id="imagen4",
+        name="Imagen 4",
+        vendor="Google",
+        contour="media",
+        t2i_id="image/imagen4",
+        i2i_id=None,
+        est_usd_t2i=0.05,
+        est_usd_i2i=None,
+        description="Google Imagen 4: высокое качество генерации. Поддерживает генерацию с референсами, но не классическое редактирование.",
+        aliases=("image/imagen4", "imagen4"),
+    ),
+    ModelFamily(
+        id="imagen4-fast",
+        name="Imagen 4 Fast",
+        vendor="Google",
+        contour="media",
+        t2i_id="image/imagen4-fast",
+        i2i_id=None,
+        est_usd_t2i=0.025,
+        est_usd_i2i=None,
+        description="Google Imagen 4 Fast: быстрая генерация. Поддерживает генерацию с референсами, но не классическое редактирование.",
+        aliases=("image/imagen4-fast", "imagen4-fast"),
     ),
     ModelFamily(
         id="recraft-upscale",
@@ -216,6 +254,7 @@ def format_catalog_for_user(usd_rub_rate: float = 95.0) -> list[dict]:
             "name": f.name,
             "vendor": f.vendor,
             "modes": modes,
+            "max_i2i_images": f.max_i2i_images if f.can_edit else 0,
             "price": {
                 "usd": f"≈ ${usd:.4f}" if usd else "—",
                 "rub": f"≈ {rub:.2f} ₽" if rub else "—",

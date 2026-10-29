@@ -588,10 +588,15 @@ input, textarea, select {
 /* Upload zone */
 .upload-zone {
   border: 2px dashed var(--border-default);
-  border-radius: var(--radius-md); padding: var(--space-5);
-  text-align: center; color: var(--text-muted); font-size: 0.875rem;
+  border-radius: var(--radius-md);
+  padding: var(--space-3) var(--space-4);
+  display: flex; align-items: center; justify-content: center;
+  gap: var(--space-2);
+  text-align: left; color: var(--text-muted); font-size: 0.875rem;
   cursor: pointer; transition: all var(--transition-fast);
+  min-height: 46px;
 }
+.upload-zone svg { flex: 0 0 auto; display: block; }
 .upload-zone:hover, .upload-zone.dragover {
   border-color: var(--accent-blue);
   background: rgba(96, 165, 250, 0.05);
@@ -1012,6 +1017,38 @@ input, textarea, select {
   .templates-grid { grid-template-columns: 1fr; }
   body { padding-bottom: 60px; }
 }
+
+/* ============================================================
+   Reset Button & Confirm Dialog
+   ============================================================ */
+
+.btn-reset {
+  width: 48px; min-width: 48px; flex: 0 0 auto;
+  background: var(--bg-root);
+  color: var(--text-primary);
+  border: 1px solid var(--text-primary);
+  border-radius: var(--radius-md);
+  display: flex; align-items: center; justify-content: center;
+  transition: all var(--transition-fast);
+}
+.btn-reset:hover { background: var(--text-primary); color: var(--text-inverse); }
+
+.confirm-dialog {
+  position: fixed; inset: 0; z-index: 300;
+  background: rgba(0, 0, 0, 0.65);
+  display: none; align-items: center; justify-content: center;
+  padding: var(--space-4);
+}
+.confirm-dialog.open { display: flex; }
+.confirm-dialog__box {
+  background: var(--bg-card); border: 1px solid var(--border-default);
+  border-radius: var(--radius-lg); padding: var(--space-6);
+  max-width: 400px; width: 100%; box-shadow: var(--shadow-lg);
+  display: flex; flex-direction: column; gap: var(--space-3);
+}
+.confirm-dialog__title { font-size: 1.1rem; font-weight: 600; }
+.confirm-dialog__text { font-size: 0.875rem; color: var(--text-secondary); line-height: 1.5; }
+.confirm-dialog__actions { display: flex; gap: var(--space-2); justify-content: flex-end; margin-top: var(--space-2); }
 
 /* ============================================================
    Utility

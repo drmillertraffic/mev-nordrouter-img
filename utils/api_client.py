@@ -355,18 +355,32 @@ class NordRouterClient:
         self,
         model: str | None,
         prompt: str,
-        image_data_url: str,
+        image_data_url: str | list[str],
         aspect_ratio: str = "1:1",
         resolution: str = "1k",
     ) -> ImageResult:
-        """Edit an existing image using any model family or exact gateway ID."""
+        """Edit an existing image using any model family or exact gateway ID.
+
+        ``image_data_url`` may be a single data URL (str) or a list of data URLs.
+        When multiple images are supplied the first goes into ``image`` and the
+        second into ``image2`` (for /media models that support it, e.g. Qwen3).
+        For the /v1 contour every image is added as a separate ``image_url``
+        content block so the model can reference them by order in the prompt.
+        """
+        # Normalise to a list while keeping backward compatibility.
+        if isinstance(image_data_url, str):
+            image_data_urls: list[str] = [image_data_url]
+        else:
+            image_data_urls = [u for u in image_data_url if u]
+        if not image_data_urls:
+            raise ValueError("edit() requires at least one image")
+
         resolved = resolve_model(model, mode="i2i")
 
         if resolved.contour == "v1":
-            content: list[dict[str, Any]] = [
-                {"type": "text", "text": prompt},
-                {"type": "image_url", "image_url": {"url": image_data_url}},
-            ]
+            content: list[dict[str, Any]] = [{"type": "text", "text": prompt}]
+            for data_url in image_data_urls:
+                content.append({"type": "image_url", "image_url": {"url": data_url}})
             payload = {
                 "model": resolved.gateway_id,
                 "modalities": ["image", "text"],
@@ -392,13 +406,47 @@ class NordRouterClient:
             img.cost_rub = round(0.0375 * self._config.usd_rub, 2)
             return img
 
-        uploaded_url = await self.upload_media_image(image_data_url)
+        # /media contour: upload every image, then map to image / image2 fields.
+        uploaded_urls: list[str] = []
+        for data_url in image_data_urls:
+            uploaded_urls.append(await self.upload_media_image(data_url))
+
         input_payload: dict[str, Any] = {
             "prompt": prompt,
-            "image": uploaded_url,
+            "image": uploaded_urls[0],
             "aspect_ratio": self._normalize_aspect_ratio(aspect_ratio),
             "resolution": resolution,
             "safety_filter": self._config.safety_filter,
+        }
+        # Models like qwen3-pro-edit / qwen3-edit accept a second reference via "image2".
+        if len(uploaded_urls) > 1:
+            input_payload["image2"] = uploaded_urls[1]
+        return await self._media_job(resolved.gateway_id, input_payload)
+
+    async def generate_with_refs(
+        self,
+        model: str | None,
+        prompt: str,
+        image_urls: list[str],
+        aspect_ratio: str = "1:1",
+        resolution: str = "1k",
+    ) -> ImageResult:
+        """Generate an image with reference images via /media/generate.
+
+        Used for models that accept ``image`` in the generate input but do not
+        have a dedicated i2i/edit endpoint (e.g. z-image, imagen4).
+        ``image_urls`` must already be uploaded gateway URLs (not data URLs).
+        Only the first image is passed as ``image``; extras are ignored.
+        """
+        resolved = resolve_model(model, mode="t2i")
+        if resolved.contour != "media":
+            raise ValueError(f"generate_with_refs only supports /media contour, got {resolved.contour}")
+        input_payload: dict[str, Any] = {
+            "prompt": prompt,
+            "aspect_ratio": self._normalize_aspect_ratio(aspect_ratio),
+            "resolution": resolution,
+            "safety_filter": self._config.safety_filter,
+            "image": image_urls[0],
         }
         return await self._media_job(resolved.gateway_id, input_payload)
 
